@@ -4,6 +4,8 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
+from datetime import date
+from sqlalchemy import Date
 
 class Base(DeclarativeBase):
     pass
@@ -23,5 +25,31 @@ class Product(Base):
     buying_price:Mapped[float]=mapped_column(Float)
     selling_price:Mapped[float]=mapped_column(Float)
 
+class sale(Base):
+    __tablename__="sales"
+    id:Mapped[int]=mapped_column(Integer,primary_key=True)
+    user_id:Mapped[int]=mapped_column(ForeignKey("user_id"))
+    total_amount:Mapped[Float]=mapped_column(Float)
 
-jobw4e56r7t8y90
+class payment(Base):
+    __tablename__="payments"
+    id:Mapped[int]=mapped_column(Integer,primary_key=True)
+    user_id:Mapped[int]=mapped_column(Integer,ForeignKey("sales.id"))
+    date_paid:Mapped[date]=mapped_column(Date)
+
+
+class purchase(Base):
+    __tablename__="purchase"
+    id:Mapped[int]=mapped_column(Integer,primary_key=True)
+    Product_id:Mapped[int]=mapped_column(Integer,ForeignKey("products_id"))
+    purchase_price:Mapped[Float]=mapped_column(Float)
+    date_purchased:Mapped[date]=mapped_column(Date)
+
+
+class sale_details(Base):
+    __tablename__="sales_details"
+    id:Mapped[int]=mapped_column(Integer,primary_key=True)
+    product_id:Mapped[int]=mapped_column(Integer,ForeignKey('products_id'))
+    sale_id:Mapped[int]=mapped_column(Integer,ForeignKey('sales_id'))
+    quantity:Mapped[int]=mapped_column(Float)
+    amount:Mapped[int]=mapped_column(Integer) 

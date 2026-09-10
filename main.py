@@ -4,9 +4,18 @@
 #4.it has to return data as JSON (key : value pairs)
 
 from flask import Flask,request,jsonify
-import json
+from sqlalchemy import create_engine
+from models import Base
 
 app = Flask(__name__)
+
+
+#create a connection to the database using sqlalchemy engine
+engine = create_engine("sqlite:///./flask_duka_api.db", echo=True)
+
+#create tables into the database using sqlalchemy
+Base.metadata.create_all(engine)
+
 
 @app.route("/")
 def home():
@@ -15,6 +24,15 @@ def home():
         return jsonify(data),200
     else:
         error = {"error" : "method not allowed"}
-        return jsonify(error),403
+        return jsonify(error),405
 
+
+@app.route ("/products")
+def products():
+    if request.method=="GET":
+        pass
+    elif request.method=="POST":
+        pass
+    else:
+        error =
 app.run(debug=True)
