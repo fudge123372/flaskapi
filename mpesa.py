@@ -1,0 +1,6 @@
+consumer_key='vNLMJ2c8OUNKnYJruMrOB1eoAtPljq48lnqc3bw6uFnEL7sT'
+consumer_secret='FWXiXQ5mESHcDEl2pxgbmnG8VHM68MnDpBroFUJD0oy8je08DaQUBUgx9oRwp0AU'
+saf_api_url=''
+saf_short_code=''
+saf_pass_key=''
+my_callback_url=''

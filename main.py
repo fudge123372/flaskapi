@@ -116,7 +116,7 @@ def products():
     user = session.scalars(select(User).where(User.email==email)).first()
     if request.method == "GET":
         #fetch data from the database
-        query = select (products)
+        query = select (Product)
         products = session.scalars(query)
 
         results = []
@@ -136,7 +136,7 @@ def products():
             error = {"error":"Ensure all fields are set"}
             return jsonify (error), 403
         else:
-            new_product = products(
+            new_product = Product(
                 user_id = user.id,
                 product_name = product_name,
                 buying_price = float(buying_price),
