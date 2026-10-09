@@ -31,38 +31,30 @@ session = Session(engine)
 user = {"id": "1","full_name" : "Larry Mokua","email" : "agustinolarry07@gmailcom","password":"larry1234"}
 
 
-@app.route("/login",methods=["GET","POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        error = {"Error":  "Method Not Allowed"}
+        error = {"Error": "Method Not Allowed"}
         return jsonify(error), 405
-    elif request.method == "POST":
-        data = request.get_json()
-
-        email = data["email"]
-        password = data["password"]
-        
-        if data["email"] == "" or data["password"] == "":
-            error = {"Error":"Ensure email and password are set"}
-            return jsonify(error),403
-
-            query = select(User).filter_by(email=data["email"])
-            existing_user = session.scalars(query).first()
-
-            if not existing_user:
-                error = {"Error":"Invalid Email"}
-                return jsonify (error), 403
-
-            if not bcrypt.check_password_hash(existing_user.password,password):
-                error = {"Error":"Invalid password"}
-                return jsonify(error), 403
-
-            token = create_access_token(identity=email)
-            return jsonify({"Message": "User logged in successfully","token":token}), 200
-            
-    else:
-        error = {"error":"Method Not Allowed"}
-        return jsonify(error), 405
+    data = request.get_json()
+    email = data.get("email")
+    password = data.get("password")
+    if email == "" or password == "":
+        error = {"Error": "Ensure email and password are set"}
+        return jsonify(error), 403
+    query = select(User).filter_by(email=email)
+    existing_user = session.scalars(query).first()
+    if not existing_user:
+        error = {"Error": "Invalid Email"}
+        return jsonify(error), 403
+    if not bcrypt.check_password_hash(existing_user.password, password):
+        error = {"Error": "Invalid password"}
+        return jsonify(error), 403
+    token = create_access_token(identity=email)
+    return jsonify({
+        "Message": "User logged in successfully",
+        "token": token
+    }), 200
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -112,13 +104,11 @@ def home():
 @jwt_required()
 def products():
     email = get_jwt_identity()
-
     user = session.scalars(select(User).where(User.email==email)).first()
     if request.method == "GET":
         #fetch data from the database
         query = select (Product)
         products = session.scalars(query)
-
         results = []
         for prod in products:
             p = {"id":prod.id,
