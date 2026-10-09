@@ -2,8 +2,7 @@ import requests
 from datetime import datetime
 import base64
 from requests.auth import HTTPBasicAuth 
-import mathgit status
-git init
+import math
 
 consumer_key='vNLMJ2c8OUNKnYJruMrOB1eoAtPljq48lnqc3bw6uFnEL7sT'
 consumer_secret='FWXiXQ5mESHcDEl2pxgbmnG8VHM68MnDpBroFUJD0oy8je08DaQUBUgx9oRwp0AU'
