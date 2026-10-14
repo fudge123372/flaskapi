@@ -3,15 +3,20 @@
 #3.it has to have a status code(200,201,403)
 #4.it has to return data as JSON (key : value pairs)
 
+
 from flask import Flask,request,jsonify
 from flask_jwt_extended import JWTManager,jwt_required,create_access_token,get_jwt_identity
 from flask_bcrypt import Bcrypt
 from sqlalchemy import create_engine,select
 from sqlalchemy.orm import Session
 from models import Base,Product,Sale,SaleDetails,Purchase,Payment,User
-from datetime import datetime
+from datetime import datetime,date
+from flask import redirect,url_for
+
 
 app = Flask(__name__)
+
+
 
 app.config["JWT_SECRET_KEY"] = "wqg1q3wc"
 jwt = JWTManager(app)
@@ -30,6 +35,7 @@ session = Session(engine)
 
 user = {"id": "1","full_name" : "Larry Mokua","email" : "agustinolarry07@gmailcom","password":"larry1234"}
 
+allowed_methods=['POST', 'GET','PUT', 'PATCH', 'DELETE', 'OPTIONS']
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -317,37 +323,55 @@ def sale_details():
         }), 201
 
 
-@app.route("/purchases", methods = ["GET", "POST"])
+@app.route('/purchases', methods=allowed_methods)
+@jwt_required()
 def purchases():
-    if request.method == "GET":
-        query = select (Purchase)
-        purchases = session.scalars(query)
-        results = []
-        for pur in purchases:
-            p= {"id": pur.id,
-                "quantity": pur.quantity,
-                "buying_price": pur.buying_price,
-                "created_at": pur.created_at}
-            results.append(p)
-        return jsonify(results), 200
-    elif request.method == "POST":
-        data = request.json()
-        if data["quantity"] == "" or data["buying_price"] == "" or data["created_at"] == "":
-            error = {"Error": "Ensure all fields are set"}
-            return jsonify(error) ,403
-        else:
-            new_purchase = Purchase(
-                product_id = data.get("product_id"),
-                quantity = float(data["quantity"]),
-                buying_price = float(data["buying_price"]),
-                created_at = data["created_at"]
-            )
-            session.add(new_purchase)
-            session.commit()
-            return jsonify({"Message":"A new purchase has been made"}), 201
+    if request.method == 'GET':
+        query = select(Purchase)
+        purchases_list = session.scalars(query)
+        result = []
+
+        for i in purchases_list:
+            item = {
+                'id': i.id,
+                'product_id': i.product_id,
+                'quantity': i.quantity,
+                'date_purchased': i.date_purchased.isoformat(),
+                'purchase_price': i.purchase_price
+            }
+            result.append(item)
+
+        return jsonify(result), 200
+
+    elif request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+
+        if (
+            not data.get('product_id')
+            or not data.get('quantity')
+            or not data.get('purchase_price')
+        ):
+            return jsonify({
+                'Message': 'Ensure all fields are set'
+            }), 400
+
+        new_purchase = Purchase(
+            product_id=data['product_id'],
+            quantity=int(data['quantity']),
+            purchase_price=float(data['purchase_price'])
+        )
+
+        session.add(new_purchase)
+        session.commit()
+
+        return jsonify({
+            'Message': 'New purchase added'
+        }), 201
+
     else:
-            error = {"Error": "Method Not Allowed"}
-            return jsonify(error),405
+        return jsonify({
+            'Message': 'Method Not Allowed'
+        }), 405
 
 @app.route("/payments", methods = ["GET", "POST"])
 def payments():
