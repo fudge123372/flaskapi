@@ -211,37 +211,110 @@ def sales():
                 "error": "Quantity must be a whole number and total_amount must be numeric"
             }), 400
 
-@app.route("/sale_details", methods = ["GET","POST"])
-def sale_details():
-    if request.method == "GET":
-        query = select(sale_details)
-        sale_details = session.scalars(query)
 
+@app.route("/sale_details", methods=["GET", "POST"])
+@jwt_required()
+def sale_details():
+    email = get_jwt_identity()
+
+    user = session.scalars(
+        select(User).where(User.email == email)
+    ).first()
+
+    if user is None:
+        return jsonify({"error": "User not found"}), 404
+
+    if request.method == "GET":
+        query = (
+            select(SaleDetails)
+            .join(Sale, SaleDetails.sale_id == Sale.id)
+            .where(Sale.user_id == user.id)
+        )
+
+        details = session.scalars(query).all()
         results = []
-        for sale_details in sale_details:
-            sd = {"id":sale_details.quantity,
-                  "quantity":sale_details.quantity,
-                  "selling_price":sale_details.quantity,
-                  "created_at":sale_details.created_at}
-            results.append(sd)
-        return jsonify(results),200
+
+        for detail in details:
+            item = {
+                "id": detail.id,
+                "sale_id": detail.sale_id,
+                "product_id": detail.product_id,
+                "quantity": detail.quantity,
+                "amount": detail.amount
+            }
+            results.append(item)
+
+        return jsonify(results), 200
+
     elif request.method == "POST":
-        data = request.get_json()
-        if data["quantity"] == "" or data ["selling_price"] == "" or data["created_at"] == "":
-            error = {"error":"Ensure all fields are set"}
-            return jsonify(error), 403
-        else:
-            new_sale_detail = Sale_details(
-                sale_id = data.get("sale_id"),
-                product_id =float(data["product_id"]),
-                created_at =data["created_at"]
+        data = request.get_json(silent=True) or {}
+
+        sale_id = data.get("sale_id")
+        product_id = data.get("product_id")
+        quantity = data.get("quantity")
+        amount = data.get("amount")
+
+        if (
+            sale_id is None
+            or product_id is None
+            or quantity is None
+            or amount is None
+        ):
+            return jsonify({
+                "error": "Please provide sale_id, product_id, quantity and amount"
+            }), 400
+
+        try:
+            sale_id = int(sale_id)
+            product_id = int(product_id)
+            quantity = int(quantity)
+            amount = float(amount)
+        except (ValueError, TypeError):
+            return jsonify({"error": "Please provide valid numeric values"}), 400
+
+        if quantity <= 0 or amount < 0:
+            return jsonify({
+                "error": "Quantity must be greater than zero and amount cannot be negative"
+            }), 400
+
+        sale = session.scalars(
+            select(Sale).where(
+                Sale.id == sale_id,
+                Sale.user_id == user.id
             )
-            session.add(new_sale_detail)
-            session.commit()
-            return jsonify({"Message":"A new sale detail has been added successfully"}), 201
-    else:
-        error = {"Error":"Method Not Allowed"}
-        return jsonify(error), 405
+        ).first()
+
+        if sale is None:
+            return jsonify({"error": "Sale not found"}), 404
+
+        product = session.scalars(
+            select(Product).where(
+                Product.id == product_id,
+                Product.user_id == user.id
+            )
+        ).first()
+
+        if product is None:
+            return jsonify({"error": "Product not found"}), 404
+
+        new_detail = SaleDetails(
+            sale_id=sale.id,
+            product_id=product.id,
+            quantity=quantity,
+            amount=amount
+        )
+
+        session.add(new_detail)
+        session.commit()
+
+        return jsonify({
+            "message": "Sale detail added successfully",
+            "id": new_detail.id,
+            "sale_id": new_detail.sale_id,
+            "product_id": new_detail.product_id,
+            "quantity": new_detail.quantity,
+            "amount": new_detail.amount
+        }), 201
 
 
 @app.route("/purchases", methods = ["GET", "POST"])
