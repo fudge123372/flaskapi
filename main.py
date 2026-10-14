@@ -139,39 +139,77 @@ def products():
         error = {"Error":"Method Not Allowed"}
         return jsonify (error), 405
 
-@app.route("/sales",methods = ["GET", "POST"])
+
+@app.route("/sales", methods=["GET", "POST"])
 @jwt_required()
 def sales():
-    id = get_jwt_identity()
+    email = get_jwt_identity()
 
-    product = session.scalars(select(product).where(product.id==id)).first()
+    # Find the logged-in user
+    user = session.scalars(
+        select(User).where(User.email == email)
+    ).first()
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
 
     if request.method == "GET":
-        query = select(Sale)
-        sales = session.scalars(query)
+        query = select(Sale).where(Sale.user_id == user.id)
+        sales_list = session.scalars(query).all()
 
         results = []
-        for sale in sales:
-            s ={"id":sale.id,
-                "quantity":sale.quantity}
-            results.append(s)
+        for sale in sales_list:
+            results.append({
+                "id": sale.id,
+                "quantity": sale.quantity,
+                "total_amount": sale.total_amount,
+                "created_at": (
+                    sale.created_at.isoformat()
+                    if sale.created_at else None
+                )
+            })
+
         return jsonify(results), 200
+
     elif request.method == "POST":
-        data = request.get_json()
-        if data ["quantity"] == "":
-            error = {"error":"Ensure all fields are set"}
-            return jsonify(error), 403
-        else:
+        data = request.get_json(silent=True) or {}
+
+        quantity = data.get("quantity")
+        total_amount = data.get("total_amount")
+
+        if quantity is None or total_amount is None:
+            return jsonify({
+                "error": "Quantity and total_amount are required"
+            }), 400
+
+        try:
+            quantity = int(quantity)
+            total_amount = float(total_amount)
+
+            if quantity <= 0 or total_amount < 0:
+                return jsonify({
+                    "error": "Quantity must be positive and total_amount cannot be negative"
+                }), 400
+
             new_sale = Sale(
-                productID = product.id,
-                quantity = float(data["quantity"])
+                user_id=user.id,
+                quantity=quantity,
+                total_amount=total_amount
             )
+
             session.add(new_sale)
             session.commit()
-            return jsonify({"Message":"A new sale has been done successfully"}), 201
-    else:
-        error = {"Error":"Method Not Allowed"}
-        return jsonify(error), 405
+
+            return jsonify({
+                "message": "Sale created successfully",
+                "sale_id": new_sale.id
+            }), 201
+
+        except (ValueError, TypeError):
+            session.rollback()
+            return jsonify({
+                "error": "Quantity must be a whole number and total_amount must be numeric"
+            }), 400
 
 @app.route("/sale_details", methods = ["GET","POST"])
 def sale_details():
