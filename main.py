@@ -113,8 +113,8 @@ def products():
     user = session.scalars(select(User).where(User.email==email)).first()
     if request.method == "GET":
         #fetch data from the database
-        query = select (Product)
-        products = session.scalars(query)
+        query = select (Product).where(Product.user_id == user.id)
+        products = session.scalars(query).all()
         results = []
         for prod in products:
             p = {"id":prod.id,
