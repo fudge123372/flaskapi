@@ -373,37 +373,65 @@ def purchases():
             'Message': 'Method Not Allowed'
         }), 405
 
-@app.route("/payments", methods = ["GET", "POST"])
+
+@app.route("/payments", methods=["GET", "POST"])
+@jwt_required()
 def payments():
+
     if request.method == "GET":
         query = select(Payment)
-        payments = session.scalars(query)
+        payments_list = session.scalars(query)
+
         results = []
-        for pay in payments:
-            pa = {"id":pay.id,
-                  "amount":pay.amount,
-                  "payment_method":pay.payment_method,
-                  "created_at":pay.created_at}
-            results.append(pa)
+
+        for pay in payments_list:
+            item = {
+                "id": pay.id,
+                "user_id": pay.user_id,
+                "amount": pay.amount,
+                "payment_method": pay.payment_method,
+                "date_paid": pay.date_paid.isoformat()
+            }
+            results.append(item)
+
         return jsonify(results), 200
+
     elif request.method == "POST":
-        data = request.get_json()
-        if data["amount"] == "" or data["payment_method"] == "" or data["created_at"] == "":
-            error = {"Error":"Ensure all fields are set"}
-            return jsonify(error), 403
-        else:
-            new_payment = Payment(
-                sale_id = data.get("sale_id"),
-                amount = float(data["amount"]),
-                payment_methods = data["payment_method"],
-                created_at = data["created_at"]
-            )
-            session.add(new_payment)
-            session.commit()
-            return jsonify ({"A new payment has been made"}), 201
+        data = request.get_json(silent=True) or {}
+
+        if (
+            not data.get("amount")
+            or not data.get("payment_method")
+        ):
+            return jsonify({
+                "Error": "Ensure all fields are set"
+            }), 400
+
+        email = get_jwt_identity()
+        user = session.scalars(
+            select(User).where(User.email == email)
+        ).first()
+
+        if not user:
+            return jsonify({"Error": "User not found"}), 404
+
+        new_payment = Payment(
+            user_id=user.id,
+            amount=float(data["amount"]),
+            payment_method=data["payment_method"]
+        )
+
+        session.add(new_payment)
+        session.commit()
+
+        return jsonify({
+            "Message": "A new payment has been added"
+        }), 201
+
     else:
-        error = {"Error":"Method Not Allowed"}
-        return jsonify(error), 405
+        return jsonify({
+            "Error": "Method Not Allowed"
+        }), 405
 
 if __name__== "__main__":
     app.run(debug=True)
