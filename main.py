@@ -37,64 +37,102 @@ user = {"id": "1","full_name" : "Larry Mokua","email" : "agustinolarry07@gmailco
 
 allowed_methods=['POST', 'GET','PUT', 'PATCH', 'DELETE', 'OPTIONS']
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "GET":
-        error = {"Error": "Method Not Allowed"}
-        return jsonify(error), 405
-    data = request.get_json()
-    email = data.get("email")
-    password = data.get("password")
-    if email == "" or password == "":
-        error = {"Error": "Ensure email and password are set"}
-        return jsonify(error), 403
-    query = select(User).filter_by(email=email)
-    existing_user = session.scalars(query).first()
-    if not existing_user:
-        error = {"Error": "Invalid Email"}
-        return jsonify(error), 403
-    if not bcrypt.check_password_hash(existing_user.password, password):
-        error = {"Error": "Invalid password"}
-        return jsonify(error), 403
-    token = create_access_token(identity=email)
-    return jsonify({
-        "Message": "User logged in successfully",
-        "token": token
-    }), 200
 
-@app.route("/register", methods=["GET", "POST"])
+
+@app.route("/register", methods=["POST"])
 def register():
-    if request.method == "GET":
-        error = {"Error":"Method Not Allowed"}
-        return jsonify(error),405
-    elif request.method == "POST":
-        data = request.get_json()
-        if data["full_name"] == "" or data["email"] == "" or data["password"] == "":
-            error = {"Error": "Ensure all fields are set"}
-            return jsonify(error), 403
-        existing_user = session.query(User).filter_by(email = data["email"]).first()
-        if existing_user :
-            error = {"Error": "Email already exists"}
-            return jsonify(error), 403
-        else :
-            hashed_password = bcrypt.generate_password_hash(
-                data["password"]
-            ).decode("utf-8")
-            new_user = User(
-                full_name=data["full_name"],
-                email=data["email"],
-                password=hashed_password,
-                created_at = datetime.utcnow()
-            )
-            session.add(new_user)
-            session.commit()
+    data = request.get_json(silent=True) or request.form
 
-            token = create_access_token(identity =data["email"])
+    full_name = data.get("full_name", "").strip()
+    email = data.get("email", "").strip().lower()
+    password = data.get("password", "")
 
-            return jsonify ({"message":"User created successfully","token":token}), 201
-    else:
-            error = {"Error": "Method Not Allowed"}
-            return jsonify(error), 405
+    if not full_name or not email or not password:
+        return jsonify({
+            "error": "Full name, email and password are required"
+        }), 400
+
+    existing_user = session.scalars(
+        select(User).where(User.email == email)
+    ).first()
+
+    if existing_user:
+        return jsonify({
+            "error": "Email already exists"
+        }), 409
+
+    hashed_password = bcrypt.generate_password_hash(
+        password
+    ).decode("utf-8")
+
+    new_user = User(
+        full_name=full_name,
+        email=email,
+        password=hashed_password
+    )
+
+    try:
+        session.add(new_user)
+        session.commit()
+
+        token = create_access_token(identity=email)
+
+        return jsonify({
+            "message": "User created successfully",
+            "token": token,
+            "user": {
+                "id": new_user.id,
+                "full_name": new_user.full_name,
+                "email": new_user.email
+            }
+        }), 201
+
+    except Exception:
+        session.rollback()
+        app.logger.exception("Registration failed")
+
+        return jsonify({
+            "error": "Registration failed. Check the server terminal."
+        }), 500
+
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json(silent=True) or request.form
+
+    email = data.get("email", "").strip().lower()
+    password = data.get("password", "")
+
+    if not email or not password:
+        return jsonify({
+            "error": "Email and password are required"
+        }), 400
+
+    existing_user = session.scalars(
+        select(User).where(User.email == email)
+    ).first()
+
+    if (
+        not existing_user
+        or not bcrypt.check_password_hash(
+            existing_user.password, password
+        )
+    ):
+        return jsonify({
+            "error": "Invalid email or password"
+        }), 401
+
+    token = create_access_token(identity=email)
+
+    return jsonify({
+        "message": "User logged in successfully",
+        "token": token,
+        "user": {
+            "id": existing_user.id,
+            "full_name": existing_user.full_name,
+            "email": existing_user.email
+        }
+    }), 200
 
 
 @app.route("/")

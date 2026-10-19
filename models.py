@@ -6,6 +6,7 @@ from sqlalchemy.orm import mapped_column
 from datetime import date, datetime
 
 
+
 class Base(DeclarativeBase):
     pass
 
@@ -47,8 +48,9 @@ class Sale(Base,TimestampMixin):
 class Payment(Base):
     __tablename__ = "payments"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    id: Mapped[int] = mapped_column( Integer,primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer,ForeignKey("users.id"))
+    sale_id: Mapped [int] = mapped_column(Integer,ForeignKey("sale_id"))
     amount: Mapped[float] = mapped_column(Float)
     payment_method: Mapped[str] = mapped_column(String(50))
     date_paid: Mapped[date] = mapped_column(Date, default=date.today)
