@@ -89,6 +89,7 @@ def register():
 
     except Exception:
         session.rollback()
+        print("REGISTRATION ERROR:",repr(e), flush=True)
         app.logger.exception("Registration failed")
 
         return jsonify({
@@ -428,7 +429,8 @@ def payments():
                 "user_id": pay.user_id,
                 "amount": pay.amount,
                 "payment_method": pay.payment_method,
-                "date_paid": pay.date_paid.isoformat()
+                "date_paid": pay.date_paid.isoformat(),
+                "sale_id": pay.sale_id
             }
             results.append(item)
 
@@ -446,15 +448,31 @@ def payments():
             }), 400
 
         email = get_jwt_identity()
-        user = session.scalars(
+        user= session.scalars(
             select(User).where(User.email == email)
         ).first()
 
         if not user:
             return jsonify({"Error": "User not found"}), 404
 
+        sale = session.get(Sale,int(data["sale_id"]))
+
+        if not sale:
+            return jsonify({"Error":"Sale not founf"}),404 
+
+        if sale.user_id !=user.id:
+            return jsonify({
+                "Error":"cannot pay another user's sale"
+            }),403
+
+        if float (data["amount"]) != sale.total_amount:
+            return jsonify({
+                "Error":"payment amount must be full"
+            }),400
+
         new_payment = Payment(
             user_id=user.id,
+            sale_id=data["sale_id"],
             amount=float(data["amount"]),
             payment_method=data["payment_method"]
         )

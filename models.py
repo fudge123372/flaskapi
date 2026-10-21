@@ -16,7 +16,7 @@ class TimestampMixin:
         default=datetime.utcnow
     )
 
-class User(Base):
+class User(Base,TimestampMixin):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -50,7 +50,7 @@ class Payment(Base):
 
     id: Mapped[int] = mapped_column( Integer,primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer,ForeignKey("users.id"))
-    sale_id: Mapped [int] = mapped_column(Integer,ForeignKey("sale_id"))
+    sale_id: Mapped [int] = mapped_column(Integer,ForeignKey("sales.id"))
     amount: Mapped[float] = mapped_column(Float)
     payment_method: Mapped[str] = mapped_column(String(50))
     date_paid: Mapped[date] = mapped_column(Date, default=date.today)
