@@ -10,7 +10,7 @@ saf_api_url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=clie
 saf_short_code='174379'
 saf_pass_key='bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919'
 saf_stkpush_api='https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
-my_callback_url='https://ferret-sacrament-theater.ngrok-free.dev/saf-callback'
+my_callback_url = "https://catering-untrue-lazy.ngrok-free.dev/saf-callback"
 
 
 
@@ -70,13 +70,14 @@ def make_stk_push(payload):
         headers=headers,
         timeout=30
     )
-    response.raise_for_status()# checks HTTP errors 
-# attempts to read saf's response as JSON
-    try:
-        return response.json()
-    except requests.exceptions.JSONDecodeError:#handles response that cannot be decoded as JSON
-        return{
-            "Error":"response was not JSON",
-            "status_code": response.status_code
-        }
+    response.raise_for_status()
+    return response.json()
+ 
+#print(get_access_token())
+print(generate_password_and_timestamp())
+#print(make_stk_push({
+ #   "phone_number": "254758770738",
+  #  "amount": 1,
+   # "sale_id":2,
+    #}))
 

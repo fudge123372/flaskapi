@@ -53,6 +53,11 @@ class Payment(Base):
     sale_id: Mapped [int] = mapped_column(Integer,ForeignKey("sales.id"))
     amount: Mapped[float] = mapped_column(Float)
     payment_method: Mapped[str] = mapped_column(String(50))
+    phone_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    mrid: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    crid: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    transaction_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     date_paid: Mapped[date] = mapped_column(Date, default=date.today)
 
 

@@ -13,6 +13,8 @@ from models import Base,Product,Sale,SaleDetails,Purchase,Payment,User
 from datetime import datetime,date
 from flask import redirect,url_for
 from mpesa import make_stk_push
+from generate_receipts import create_pdf
+
 
 
 app = Flask(__name__)
@@ -518,6 +520,83 @@ def payments():
         return jsonify({
             "Error": "Method Not Allowed"
         }), 405
+
+@app.route('/stk-push', methods=["POST"])
+@jwt_required()
+def stk_push():
+    email = get_jwt_identity()#receives identity stored in the login token
+
+    user = session.scalars(
+        select(User).where(User.email == email)
+    ).first()
+
+    if not user:
+        return jsonify({
+            "Error":"User not found"
+        }),404
+
+    try:
+        payload=request.get_json(silent=True) or {}#prevent flask from raising an errorif the request doenst contain valid JSON
+        if not all(key in payload for key in ("sale_id", "amount", "phone_number")):
+            return jsonify({
+                "error": "sale_id, amount and phone_number are required"
+            }), 400
+        response=make_stk_push(payload)
+        print(response)
+        new_payment=Payment(
+            user_id=user.id,
+            sale_id=payload['sale_id'],
+            amount=payload['amount'],
+            payment_method="M-Pesa",
+            phone_number=payload['phone_number'],
+            mrid=response.get('MerchantRequestID'),
+            crid=response.get('CheckoutRequestID'),
+            status='pending'
+        )
+        session.add(new_payment)
+        session.commit()
+        return {'message':"stk push initiated"}
+
+    except Exception as e:
+        print(f'stk-push error:{e}')
+        session.rollback()
+        return jsonify({"error":"stk push failed"}),500   
+
+@app.route('/saf-callback', methods=["POST"])
+def saf_callback():
+    try:
+        payload = request.get_json()
+        body = payload.get('Body', {})
+        stkCallback = body.get('stkCallback', {})
+        result_code = stkCallback.get('ResultCode')
+        mrid = stkCallback.get('MerchantRequestID')
+        crid = stkCallback.get('CheckoutRequestID')
+
+        payment = session.scalars(select(Payment).where(Payment.mrid == mrid)).first()
+
+        if payment:
+            if result_code == 0:
+                callback_metadata = stkCallback.get('CallbackMetadata', {})
+                for item in callback_metadata.get('Item', []):
+                    if item.get('Name') == 'MpesaReceiptNumber':
+                        payment.transaction_code = item.get('Value')
+                payment.status = "completed"
+            else:
+                payment.status = "failed"
+
+            # Commit payment status FIRST - this is critical
+            session.commit()
+
+            # Generate the receipt PDF
+            text = f"Trans Code : {payment.transaction_code}, Amount : {payment.amount}, Date : {payment.date_paid}"
+
+    except Exception as e:
+        print({"Message": "Error Processing Callback"})
+        print({'stk push error': e})
+        session.rollback()
+
+    print("--------------------callback received--------------------------", flush=True)
+    return {"message": "callback received"}
 
 if __name__== "__main__":
     app.run(debug=True)
