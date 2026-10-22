@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from models import Base,Product,Sale,SaleDetails,Purchase,Payment,User
 from datetime import datetime,date
 from flask import redirect,url_for
+from mpesa import make_stk_push
 
 
 app = Flask(__name__)
@@ -439,6 +440,16 @@ def payments():
     elif request.method == "POST":
         data = request.get_json(silent=True) or {}
 
+        
+        if (
+            data.get("payment_method") == "M-Pesa"# checks whether mpesa is selected
+            and not data.get("phone_number")# checks for phone number
+        ):
+            return jsonify({
+                "Error": "Phone number is required for M-Pesa payments"
+            }), 400
+
+
         if (
             not data.get("amount")
             or not data.get("payment_method")
@@ -469,6 +480,25 @@ def payments():
             return jsonify({
                 "Error":"payment amount must be full"
             }),400
+        
+        if data["payment_method"] == "M-Pesa":
+            payload = {
+                "amount": data["amount"],
+                "phone_number": data["phone_number"],
+                "sale_id": sale.id
+            }
+            try:
+                response = make_stk_push(payload)
+            except Exception as e:
+                print("M-Pesa STK Push error:", e)
+                return jsonify({
+                    "Error": "Could not initiate M-Pesa payment"
+                }), 502 # returns an error rather than creating a normal payment record
+
+            return jsonify({
+                "Message": "M-Pesa payment request sent to Safaricom",
+                "SafaricomResponse": response
+            }), 200
 
         new_payment = Payment(
             user_id=user.id,
