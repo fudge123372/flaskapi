@@ -589,6 +589,9 @@ def saf_callback():
 
             # Generate the receipt PDF
             text = f"Trans Code : {payment.transaction_code}, Amount : {payment.amount}, Date : {payment.date_paid}"
+            
+            if result_code == 0:
+                create_pdf(text,payment.transaction_code)
 
     except Exception as e:
         print({"Message": "Error Processing Callback"})
