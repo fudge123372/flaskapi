@@ -57,6 +57,7 @@ class Payment(Base):
     mrid: Mapped[str | None] = mapped_column(String(100), nullable=True)
     crid: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
+    receipt_status: Mapped[str] = mapped_column(String(20), default="pending")
     transaction_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     date_paid: Mapped[date] = mapped_column(Date, default=date.today)
 

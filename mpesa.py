@@ -74,7 +74,7 @@ def make_stk_push(payload):
     return response.json()
  
 #print(get_access_token())
-print(generate_password_and_timestamp())
+#print(generate_password_and_timestamp())
 #print(make_stk_push({
  #   "phone_number": "254758770738",
   #  "amount": 1,

@@ -12,7 +12,7 @@ cloudinary.config(
     api_secret=Secret_Key
 )
 
-def upload_pdf(pdf_file):
+def upload_pdf(pdf_file,recipient_email):
     try:
         file_path = f"receipts/{pdf_file}.pdf"
         upload = cloudinary.uploader.upload(file_path, resource_type="raw")
@@ -20,7 +20,11 @@ def upload_pdf(pdf_file):
         print("successful cloudinary upload")
         print(receipt_url)
         #send email
-        email("agustinolarry07@gmail.com","payment receive","thankyou we have received your payment.\n\n",f"Receipt:{receipt_url}")
+        email(
+            recipient_email,
+            "Payment Receipt",
+            f"Thank you! We have received your payment.\n\nYour receipt is available here: {receipt_url}"
+        )
         return "success"
     except Exception as e:
         print(f"upload failed: {e}")

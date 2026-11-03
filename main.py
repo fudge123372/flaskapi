@@ -14,10 +14,12 @@ from datetime import datetime,date
 from flask import redirect,url_for
 from mpesa import make_stk_push
 from generate_receipts import create_pdf
+from flask_cors import CORS
 
 
 
 app = Flask(__name__)
+CORS(app)
 
 
 
@@ -90,7 +92,7 @@ def register():
             }
         }), 201
 
-    except Exception:
+    except Exception as e:
         session.rollback()
         print("REGISTRATION ERROR:",repr(e), flush=True)
         app.logger.exception("Registration failed")
@@ -188,12 +190,12 @@ def products():
         return jsonify (error), 405
 
 
+
 @app.route("/sales", methods=["GET", "POST"])
 @jwt_required()
 def sales():
     email = get_jwt_identity()
 
-    # Find the logged-in user
     user = session.scalars(
         select(User).where(User.email == email)
     ).first()
@@ -201,16 +203,53 @@ def sales():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    # GET: Display the logged-in user's sales
     if request.method == "GET":
-        query = select(Sale).where(Sale.user_id == user.id)
-        sales_list = session.scalars(query).all()
+        sales_list = session.scalars(
+            select(Sale).where(Sale.user_id == user.id).order_by(Sale.id.desc())
+        ).all()
 
         results = []
+
         for sale in sales_list:
+            detail = session.scalars(
+                select(SaleDetails).where(
+                    SaleDetails.sale_id == sale.id
+                )
+            ).first()
+
+            product_name = None
+            product_id = None
+
+            if detail:
+                product = session.get(Product, detail.product_id)
+
+                if product:
+                    product_name = product.product_name
+                    product_id = product.id
+
+            payment = session.scalars(
+                select(Payment)
+                .where(
+                    Payment.sale_id == sale.id,
+                    Payment.user_id == user.id
+                )
+                .order_by(Payment.id.desc())
+            ).first()
+
+            payment_status = payment.status if payment else "unpaid"
+            payment_id = payment.id if payment else None
+            payment_method = payment.payment_method if payment else None
+
             results.append({
                 "id": sale.id,
+                "product_id": product_id,
+                "product_name": product_name,
                 "quantity": sale.quantity,
                 "total_amount": sale.total_amount,
+                "status": payment_status,
+                "payment_id":payment_id,
+                "payment_method":payment_method,
                 "created_at": (
                     sale.created_at.isoformat()
                     if sale.created_at else None
@@ -219,25 +258,41 @@ def sales():
 
         return jsonify(results), 200
 
+    # POST: Create a sale using an existing product
     elif request.method == "POST":
         data = request.get_json(silent=True) or {}
 
+        product_id = data.get("product_id")
         quantity = data.get("quantity")
-        total_amount = data.get("total_amount")
 
-        if quantity is None or total_amount is None:
+        if product_id is None or quantity is None:
             return jsonify({
-                "error": "Quantity and total_amount are required"
+                "error": "Product ID and quantity are required"
             }), 400
 
         try:
+            product_id = int(product_id)
             quantity = int(quantity)
-            total_amount = float(total_amount)
 
-            if quantity <= 0 or total_amount < 0:
+            if product_id <= 0 or quantity <= 0:
                 return jsonify({
-                    "error": "Quantity must be positive and total_amount cannot be negative"
+                    "error": "Product ID and quantity must be positive"
                 }), 400
+
+            product = session.scalars(
+                select(Product).where(
+                    Product.id == product_id,
+                    Product.user_id == user.id
+                )
+            ).first()
+
+            if not product:
+                return jsonify({
+                    "error": "Product not found"
+                }), 404
+
+            # Calculate the amount using the product selling price
+            total_amount = product.selling_price * quantity
 
             new_sale = Sale(
                 user_id=user.id,
@@ -246,18 +301,129 @@ def sales():
             )
 
             session.add(new_sale)
+            session.flush()
+
+            new_detail = SaleDetails(
+                sale_id=new_sale.id,
+                product_id=product.id,
+                quantity=quantity,
+                amount=total_amount
+            )
+
+            session.add(new_detail)
             session.commit()
 
             return jsonify({
                 "message": "Sale created successfully",
-                "sale_id": new_sale.id
+                "sale_id": new_sale.id,
+                "product_name": product.product_name,
+                "quantity": quantity,
+                "total_amount": total_amount
             }), 201
 
         except (ValueError, TypeError):
             session.rollback()
             return jsonify({
-                "error": "Quantity must be a whole number and total_amount must be numeric"
+                "error": "Product ID and quantity must be valid numbers"
             }), 400
+
+        except Exception as e:
+            session.rollback()
+            print("SALE CREATION ERROR:", repr(e))
+            return jsonify({
+                "error": "Could not create sale"
+            }), 500
+
+
+# PUT: Edit an existing sale
+@app.route("/sales/<int:sale_id>", methods=["PUT"])
+@jwt_required()
+def update_sale(sale_id):
+    email = get_jwt_identity()
+
+    user = session.scalars(
+        select(User).where(User.email == email)
+    ).first()
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    sale = session.scalars(
+        select(Sale).where(
+            Sale.id == sale_id,
+            Sale.user_id == user.id
+        )
+    ).first()
+
+    if not sale:
+        return jsonify({"error": "Sale not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+
+    quantity = data.get("quantity")
+
+    if quantity is None:
+        return jsonify({
+            "error": "Quantity is required"
+        }), 400
+
+    try:
+        quantity = int(quantity)
+
+        if quantity <= 0:
+            return jsonify({
+                "error": "Quantity must be greater than zero"
+            }), 400
+
+        detail = session.scalars(
+            select(SaleDetails).where(
+                SaleDetails.sale_id == sale.id
+            )
+        ).first()
+
+        if not detail:
+            return jsonify({
+                "error": "Sale product details not found"
+            }), 404
+
+        product = session.get(Product, detail.product_id)
+
+        if not product:
+            return jsonify({
+                "error": "Product not found"
+            }), 404
+
+        total_amount = product.selling_price * quantity
+
+        sale.quantity = quantity
+        sale.total_amount = total_amount
+
+        detail.quantity = quantity
+        detail.amount = total_amount
+
+        session.commit()
+
+        return jsonify({
+            "message": "Sale updated successfully",
+            "sale_id": sale.id,
+            "product_name": product.product_name,
+            "quantity": quantity,
+            "total_amount": total_amount
+        }), 200
+
+    except (ValueError, TypeError):
+        session.rollback()
+        return jsonify({
+            "error": "Quantity must be a valid whole number"
+        }), 400
+
+    except Exception as e:
+        session.rollback()
+        print("SALE UPDATE ERROR:", repr(e))
+        return jsonify({
+            "error": "Could not update sale"
+        }), 500
+
 
 
 @app.route("/sale_details", methods=["GET", "POST"])
@@ -421,6 +587,14 @@ def purchases():
 def payments():
 
     if request.method == "GET":
+        email = get_jwt_identity()
+
+        user = session.scalars(select(User).where(user.email == email)).first()
+
+        if not user:
+            return jsonify({"error":"User not found"}),404
+
+
         query = select(Payment)
         payments_list = session.scalars(query)
 
@@ -429,11 +603,13 @@ def payments():
         for pay in payments_list:
             item = {
                 "id": pay.id,
-                "user_id": pay.user_id,
                 "amount": pay.amount,
                 "payment_method": pay.payment_method,
-                "date_paid": pay.date_paid.isoformat(),
-                "sale_id": pay.sale_id
+                "date_paid": (
+                    pay.date_paid.isoformat()if pay.date_paid else None
+                ),
+                "sale_id": pay.sale_id,
+                "status":pay.status
             }
             results.append(item)
 
@@ -441,7 +617,27 @@ def payments():
 
     elif request.method == "POST":
         data = request.get_json(silent=True) or {}
+        sale_id=data.get("sale.id")
+        amount = data.get("amount")
+        payment_method = data.get("payment_method")
+        phone_number = data.get("phone_number")
 
+        if sale_id is None or amount is None or not payment_method:
+            return jsonify({
+                "error":"Sale ID,amount and payment method is required"
+            }),400
+        try:
+            sale_id = int(sale_id)
+            amount = float(amount)
+
+            if sale_id <= 0 or amount <= 0:
+                return jsonify ({"error":"Sale ID and amount error"})
+        except (ValueError,TypeError):
+            return jsonify ({
+                "error":"Sale ID and amount must be a valid number"
+            }),400
+        if payment_method =="M-pesa" and not phone_number:
+            return jsonify ({"error":"phone number is required"}),400
         
         if (
             data.get("payment_method") == "M-Pesa"# checks whether mpesa is selected
@@ -468,15 +664,28 @@ def payments():
         if not user:
             return jsonify({"Error": "User not found"}), 404
 
-        sale = session.get(Sale,int(data["sale_id"]))
+        sale = session.get(Sale,sale_id)
 
         if not sale:
-            return jsonify({"Error":"Sale not founf"}),404 
+            return jsonify({"Error":"Sale not found"}),404 
+        #check whether payment has already started or completed
+        payment=session.scalars(select(Payment).where(Payment.sale_id == sale.id,Payment.user_id == user.id,Payment.status.in_(["pending","completed"]))).first()
+        
+        if payment:
+            return jsonify({
+                "error":"This sale cannot be edited because payment is pending or completed"
+            }),403
 
         if sale.user_id !=user.id:
             return jsonify({
                 "Error":"cannot pay another user's sale"
             }),403
+        #prevent duplicate payments
+        existing_payment = session.scalars(select(Payment).where(Payment.sale_id == sale.id,Payment.user_id == user.id,Payment.status.in_(["pending","completed"]))).first()
+        if existing_payment:
+            return jsonify ({
+                "error":"A payment already exists","status":existing_payment.status
+            }),409
 
         if float (data["amount"]) != sale.total_amount:
             return jsonify({
@@ -504,16 +713,21 @@ def payments():
 
         new_payment = Payment(
             user_id=user.id,
-            sale_id=data["sale_id"],
-            amount=float(data["amount"]),
-            payment_method=data["payment_method"]
+            sale_id=sale_id,
+            amount=amount,
+            payment_method=payment_method,
+            status="completed"
         )
 
         session.add(new_payment)
         session.commit()
 
         return jsonify({
-            "Message": "A new payment has been added"
+            "Message": "A new payment has been added",
+            "payment_id":new_payment.id,
+            "sale_id":sale.id,
+            "amount":amount,
+            "status":new_payment.status
         }), 201
 
     else:
@@ -521,10 +735,11 @@ def payments():
             "Error": "Method Not Allowed"
         }), 405
 
+
 @app.route('/stk-push', methods=["POST"])
 @jwt_required()
 def stk_push():
-    email = get_jwt_identity()#receives identity stored in the login token
+    email = get_jwt_identity()
 
     user = session.scalars(
         select(User).where(User.email == email)
@@ -532,35 +747,99 @@ def stk_push():
 
     if not user:
         return jsonify({
-            "Error":"User not found"
-        }),404
+            "error": "User not found"
+        }), 404
+
+    data = request.get_json(silent=True) or {}
+
+    sale_id = data.get("sale_id")
+    amount = data.get("amount")
+    phone_number = data.get("phone_number")
+
+    if sale_id is None or amount is None or not phone_number:
+        return jsonify({
+            "error": "Sale ID, amount and phone number are required"
+        }), 400
 
     try:
-        payload=request.get_json(silent=True) or {}#prevent flask from raising an errorif the request doenst contain valid JSON
-        if not all(key in payload for key in ("sale_id", "amount", "phone_number")):
+        sale_id = int(sale_id)
+        amount = float(amount)
+
+        if sale_id <= 0 or amount <= 0:
             return jsonify({
-                "error": "sale_id, amount and phone_number are required"
+                "error": "Sale ID and amount must be positive"
             }), 400
-        response=make_stk_push(payload)
-        print(response)
-        new_payment=Payment(
+
+        # Confirm that this sale belongs to the logged-in user
+        sale = session.scalars(
+            select(Sale).where(
+                Sale.id == sale_id,
+                Sale.user_id == user.id
+            )
+        ).first()
+
+        if not sale:
+            return jsonify({
+                "error": "Sale not found"
+            }), 404
+
+        #prevent another payment request while payment is pending
+        existing_payment = session.scalars(select(Payment).where(Payment.sale_id == sale.id,Payment.user_id == user.id,Payment.status.in_(["pending","completed"]))).first()
+        
+        if existing_payment:
+            return jsonify({"error":"A payment request exists for this sale","status":existing_payment.status}),409
+
+        # Confirm that the payment amount matches the sale
+        if round(amount, 2) != round(sale.total_amount, 2):
+            return jsonify({
+                "error": "Payment amount does not match the sale total"
+            }), 400
+
+        payload = {
+            "amount": amount,
+            "phone_number": phone_number,
+            "sale_id": sale.id
+        }
+
+        response = make_stk_push(payload)
+        if not response or response.get("ResponseCode") != "0":
+            return jsonify({"error":"payment request denied","details":response}),502
+
+        new_payment = Payment(
             user_id=user.id,
-            sale_id=payload['sale_id'],
-            amount=payload['amount'],
+            sale_id=sale.id,
+            amount=amount,
             payment_method="M-Pesa",
-            phone_number=payload['phone_number'],
-            mrid=response.get('MerchantRequestID'),
-            crid=response.get('CheckoutRequestID'),
-            status='pending'
+            phone_number=phone_number,
+            mrid=response.get("MerchantRequestID"),
+            crid=response.get("CheckoutRequestID"),
+            status="pending"
         )
+
         session.add(new_payment)
         session.commit()
-        return {'message':"stk push initiated"}
+
+        return jsonify({
+            "message": "M-Pesa payment request sent successfully",
+            "payment_id": new_payment.id,
+            "sale_id": sale.id,
+            "amount": amount,
+            "status": "pending",
+            "safaricom_response": response
+        }), 200
+
+    except (ValueError, TypeError):
+        return jsonify({
+            "error": "Sale ID and amount must be valid numbers"
+        }), 400
 
     except Exception as e:
-        print(f'stk-push error:{e}')
         session.rollback()
-        return jsonify({"error":"stk push failed"}),500   
+        print("STK PUSH ERROR:", repr(e))
+
+        return jsonify({
+            "error": "M-Pesa payment could not be initiated"
+        }), 500
 
 @app.route('/saf-callback', methods=["POST"])
 def saf_callback():
@@ -575,6 +854,9 @@ def saf_callback():
         payment = session.scalars(select(Payment).where(Payment.mrid == mrid)).first()
 
         if payment:
+            if payment.status == "completed" and payment.receipt_status == "sent":
+                return {"message":"Payment and receipt already processed"}
+
             if result_code == 0:
                 callback_metadata = stkCallback.get('CallbackMetadata', {})
                 for item in callback_metadata.get('Item', []):
@@ -591,7 +873,18 @@ def saf_callback():
             text = f"Trans Code : {payment.transaction_code}, Amount : {payment.amount}, Date : {payment.date_paid}"
             
             if result_code == 0:
-                create_pdf(text,payment.transaction_code)
+                user = session.get(User,payment.user_id)
+                if user:
+                    result = create_pdf(text,payment.transaction_code,user.email)
+                    if result == "success":
+                        payment.receipt_status = "sent" 
+                    else:
+                        payment.receipt_status = "pending"
+                    
+                    session.commit()
+
+                else:
+                    print("Customer not found.Receipt email not sent")
 
     except Exception as e:
         print({"Message": "Error Processing Callback"})
