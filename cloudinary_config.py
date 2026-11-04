@@ -17,9 +17,9 @@ def upload_pdf(pdf_file,recipient_email):
         file_path = f"receipts/{pdf_file}.pdf"
         upload = cloudinary.uploader.upload(file_path, resource_type="raw",folder="vueapp")
         receipt_url = upload["secure_url"]
-        print("successful cloudinary upload")
-        print(receipt_url)
-        return "success"
+        print("successful cloudinary upload",flush=True)
+        print(receipt_url,flush=True)
+        return receipt_url
     except Exception as e:
-        print(f"upload failed: {e}")
+        print(f"upload failed: {e}",flush=True)
         return "failed"

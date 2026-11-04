@@ -1,7 +1,7 @@
 from fpdf import FPDF
 from cloudinary_config import upload_pdf
 
-def create_pdf(payment_data, transaction_code,recipient_email):
+def create_pdf(payment_data, transaction_code):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)

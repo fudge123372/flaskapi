@@ -827,7 +827,9 @@ def stk_push():
 @app.route('/saf-callback', methods=["POST"])
 def saf_callback():
     try:
+        print("WE ARE INSIDE SAF CALLBACK", flush=True)
         payload = request.get_json()
+        print("CALLBACK RECEIVED:",payload,flush=True)
         body = payload.get('Body', {})
         stkCallback = body.get('stkCallback', {})
         result_code = stkCallback.get('ResultCode')
@@ -836,7 +838,7 @@ def saf_callback():
         payment = session.scalars(select(Payment).where(Payment.mrid == mrid)).first()
 
         if payment:
-            if payment.status == "completed" and payment.receipt_status == "sent":
+            if payment.status == "completed" and payment.receipt_url:
                 return {"message":"Payment and receipt already processed"}
 
             if result_code == 0:
