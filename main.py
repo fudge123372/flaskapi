@@ -240,6 +240,7 @@ def sales():
             payment_status = payment.status if payment else "unpaid"
             payment_id = payment.id if payment else None
             payment_method = payment.payment_method if payment else None
+            receipt_url = payment.receipt_url if payment else None
 
             results.append({
                 "id": sale.id,
@@ -250,6 +251,7 @@ def sales():
                 "status": payment_status,
                 "payment_id":payment_id,
                 "payment_method":payment_method,
+                "receipt_url":receipt_url,
                 "created_at": (
                     sale.created_at.isoformat()
                     if sale.created_at else None
@@ -334,13 +336,11 @@ def sales():
                 "error": "Could not create sale"
             }), 500
 
-
 # PUT: Edit an existing sale
 @app.route("/sales/<int:sale_id>", methods=["PUT"])
 @jwt_required()
 def update_sale(sale_id):
     email = get_jwt_identity()
-
     user = session.scalars(
         select(User).where(User.email == email)
     ).first()
@@ -359,7 +359,6 @@ def update_sale(sale_id):
         return jsonify({"error": "Sale not found"}), 404
 
     data = request.get_json(silent=True) or {}
-
     quantity = data.get("quantity")
 
     if quantity is None:
@@ -425,12 +424,10 @@ def update_sale(sale_id):
         }), 500
 
 
-
 @app.route("/sale_details", methods=["GET", "POST"])
 @jwt_required()
 def sale_details():
     email = get_jwt_identity()
-
     user = session.scalars(
         select(User).where(User.email == email)
     ).first()
@@ -530,7 +527,6 @@ def sale_details():
             "amount": new_detail.amount
         }), 201
 
-
 @app.route('/purchases', methods=allowed_methods)
 @jwt_required()
 def purchases():
@@ -550,10 +546,8 @@ def purchases():
             result.append(item)
 
         return jsonify(result), 200
-
     elif request.method == 'POST':
         data = request.get_json(silent=True) or {}
-
         if (
             not data.get('product_id')
             or not data.get('quantity')
@@ -562,7 +556,6 @@ def purchases():
             return jsonify({
                 'Message': 'Ensure all fields are set'
             }), 400
-
         new_purchase = Purchase(
             product_id=data['product_id'],
             quantity=int(data['quantity']),
@@ -581,23 +574,18 @@ def purchases():
             'Message': 'Method Not Allowed'
         }), 405
 
-
 @app.route("/payments", methods=["GET", "POST"])
 @jwt_required()
 def payments():
-
     if request.method == "GET":
         email = get_jwt_identity()
-
         user = session.scalars(select(User).where(user.email == email)).first()
 
         if not user:
             return jsonify({"error":"User not found"}),404
 
-
         query = select(Payment)
         payments_list = session.scalars(query)
-
         results = []
 
         for pay in payments_list:
@@ -612,7 +600,6 @@ def payments():
                 "status":pay.status
             }
             results.append(item)
-
         return jsonify(results), 200
 
     elif request.method == "POST":
@@ -646,7 +633,6 @@ def payments():
             return jsonify({
                 "Error": "Phone number is required for M-Pesa payments"
             }), 400
-
 
         if (
             not data.get("amount")
@@ -751,7 +737,6 @@ def stk_push():
         }), 404
 
     data = request.get_json(silent=True) or {}
-
     sale_id = data.get("sale_id")
     amount = data.get("amount")
     phone_number = data.get("phone_number")
@@ -764,12 +749,10 @@ def stk_push():
     try:
         sale_id = int(sale_id)
         amount = float(amount)
-
         if sale_id <= 0 or amount <= 0:
             return jsonify({
                 "error": "Sale ID and amount must be positive"
             }), 400
-
         # Confirm that this sale belongs to the logged-in user
         sale = session.scalars(
             select(Sale).where(
@@ -849,7 +832,6 @@ def saf_callback():
         stkCallback = body.get('stkCallback', {})
         result_code = stkCallback.get('ResultCode')
         mrid = stkCallback.get('MerchantRequestID')
-        crid = stkCallback.get('CheckoutRequestID')
 
         payment = session.scalars(select(Payment).where(Payment.mrid == mrid)).first()
 
@@ -875,14 +857,13 @@ def saf_callback():
             if result_code == 0:
                 user = session.get(User,payment.user_id)
                 if user:
-                    result = create_pdf(text,payment.transaction_code,user.email)
-                    if result == "success":
-                        payment.receipt_status = "sent" 
+                    receipt_url= create_pdf(text,payment.transaction_code)
+                    if receipt_url:
+                        payment.receipt_url = receipt_url
+                        payment.receipt_status = "available"
                     else:
                         payment.receipt_status = "pending"
-                    
                     session.commit()
-
                 else:
                     print("Customer not found.Receipt email not sent")
 

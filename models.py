@@ -58,6 +58,7 @@ class Payment(Base):
     crid: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     receipt_status: Mapped[str] = mapped_column(String(20), default="pending")
+    receipt_url:Mapped[str | None] = mapped_column(String(500),nullable=True)#receipt doesnt exist while a payment is pending
     transaction_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     date_paid: Mapped[date] = mapped_column(Date, default=date.today)
 
