@@ -579,12 +579,12 @@ def purchases():
 def payments():
     if request.method == "GET":
         email = get_jwt_identity()
-        user = session.scalars(select(User).where(user.email == email)).first()
+        user = session.scalars(select(User).where(User.email == email)).first()
 
         if not user:
             return jsonify({"error":"User not found"}),404
 
-        query = select(Payment)
+        query = select(Payment).where(Payment.user_id == user.id)
         payments_list = session.scalars(query)
         results = []
 
@@ -597,7 +597,11 @@ def payments():
                     pay.date_paid.isoformat()if pay.date_paid else None
                 ),
                 "sale_id": pay.sale_id,
-                "status":pay.status
+                "status":pay.status,
+                "receipt_status": pay.receipt_status,
+                "receipt_url":pay.receipt_url,
+                "transaction_code": pay.transaction_code,
+                "mrid":pay.mrid
             }
             results.append(item)
         return jsonify(results), 200

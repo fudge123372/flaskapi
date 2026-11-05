@@ -12,7 +12,7 @@ cloudinary.config(
     api_secret=Secret_Key
 )
 
-def upload_pdf(pdf_file,recipient_email):
+def upload_pdf(pdf_file):
     try:
         file_path = f"receipts/{pdf_file}.pdf"
         upload = cloudinary.uploader.upload(file_path, resource_type="raw",folder="vueapp")
